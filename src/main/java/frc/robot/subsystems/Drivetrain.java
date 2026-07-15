@@ -4,10 +4,12 @@
 
 package frc.robot.subsystems;
 
+import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.util.sendable.SendableRegistry;
 import edu.wpi.first.wpilibj.BuiltInAccelerometer;
 import edu.wpi.first.wpilibj.Encoder;
 import edu.wpi.first.wpilibj.drive.DifferentialDrive;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj.xrp.XRPGyro;
 import edu.wpi.first.wpilibj.xrp.XRPMotor;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
@@ -18,6 +20,14 @@ public class Drivetrain extends SubsystemBase {
   private static final double kCountsPerMotorShaftRev = 12.0;
   private static final double kCountsPerRevolution = kCountsPerMotorShaftRev * kGearRatio; // 585.0
   private static final double kWheelDiameterInch = 2.3622; // 60 mm
+
+  private final PIDController m_headingController = new PIDController(0.03, 0.0, 0.001);
+
+  private double m_targetHeadingDeg = 0.0;
+
+  private static final double kTurnDeadband = 0.08;
+  private static final double kForwardDeadband = 0.05;
+  private static final double kMaxCorrection = 0.25;
 
   // The XRP has the left and right motors set to
   // channels 0 and 1 respectively
@@ -141,10 +151,63 @@ public class Drivetrain extends SubsystemBase {
   /** Reset the gyro. */
   public void resetGyro() {
     m_gyro.reset();
+    m_targetHeadingDeg = 0.0;
+    m_headingController.reset();
   }
+
+  public double getHeadingDegrees() {
+    return m_gyro.getAngle();
+  }
+
+  public double getGyroRateZ() {
+    return m_gyro.getRateZ();
+  }
+
+  public void arcadeDriveGyroAssist(double xaxisSpeed, double zaxisRotate) {
+
+    // Driver is intentionally turning
+    if (Math.abs(zaxisRotate) > kTurnDeadband) {
+      m_targetHeadingDeg = getHeadingDegrees();
+      arcadeDrive(xaxisSpeed, zaxisRotate);
+      return;
+    }
+
+    // Robot is stopped
+    if (Math.abs(xaxisSpeed) < kForwardDeadband) {
+      m_targetHeadingDeg = getHeadingDegrees();
+      arcadeDrive(0.0, 0.0);
+      return;
+    }
+
+    // Driving straight, use gyro correction
+    double correction =
+        m_headingController.calculate(
+            getHeadingDegrees(),
+            m_targetHeadingDeg);
+
+    // Clamp correction
+    correction = Math.max(
+        -kMaxCorrection,
+        Math.min(kMaxCorrection, correction));
+
+    arcadeDrive(xaxisSpeed, correction);
+  }
+
 
   @Override
   public void periodic() {
-    // This method will be called once per scheduler run
+    SmartDashboard.putNumber("Gyro Heading Deg", getHeadingDegrees());
+    SmartDashboard.putNumber("Gyro Rate Z", getGyroRateZ());
+
+    SmartDashboard.putNumber("Left Distance Inch", getLeftDistanceInch());
+    SmartDashboard.putNumber("Right Distance Inch", getRightDistanceInch());
+    SmartDashboard.putNumber("Average Distance Inch", getAverageDistanceInch());
+
+    SmartDashboard.putNumber(
+        "Left Right Distance Difference",
+        getLeftDistanceInch() - getRightDistanceInch());
+    SmartDashboard.putNumber("Heading", getHeadingDegrees());
+    SmartDashboard.putNumber("Left Count", getLeftEncoderCount());
+    SmartDashboard.putNumber("Right Count", getRightEncoderCount());
   }
 }

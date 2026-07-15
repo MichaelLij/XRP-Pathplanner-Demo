@@ -26,7 +26,7 @@ public class Arm extends SubsystemBase {
    *
    * @param angleDeg Desired arm angle in degrees
    */
-  public void setAngle(double angleDeg) {
-    m_armServo.setAngle(angleDeg);
+  public void setAngle(double position) {
+    m_armServo.setAngle(position);
   }
 }

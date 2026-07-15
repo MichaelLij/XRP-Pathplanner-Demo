@@ -64,13 +64,17 @@ public class RobotContainer {
 
     JoystickButton joystickAButton = new JoystickButton(m_controller, 1);
     joystickAButton
-        .onTrue(new InstantCommand(() -> m_arm.setAngle(0.0), m_arm))
-        .onFalse(new InstantCommand(() -> m_arm.setAngle(100.0), m_arm));
+        .onTrue(new InstantCommand(() -> m_arm.setAngle(84.0), m_arm))
+        .onFalse(new InstantCommand(() -> m_arm.setAngle(42.0), m_arm));
 
     JoystickButton joystickBButton = new JoystickButton(m_controller, 2);
     joystickBButton
-        .onTrue(new InstantCommand(() -> m_arm.setAngle(-90.0), m_arm))
-        .onFalse(new InstantCommand(() -> m_arm.setAngle(0.0), m_arm));
+        .onTrue(new InstantCommand(() -> m_arm.setAngle(126.5), m_arm))
+        .onFalse(new InstantCommand(() -> m_arm.setAngle(42.0), m_arm));
+
+    JoystickButton joystickXButton = new JoystickButton(m_controller, 3);
+    joystickXButton
+        .onTrue(new InstantCommand(() -> m_drivetrain.resetGyro(), m_drivetrain));
 
     // Setup SmartDashboard options
     m_chooser.setDefaultOption("Auto Routine Distance", new AutonomousDistance(m_drivetrain));
@@ -94,6 +98,6 @@ public class RobotContainer {
    */
   public Command getArcadeDriveCommand() {
     return new ArcadeDrive(
-        m_drivetrain, () -> -m_controller.getRawAxis(1), () -> -m_controller.getRawAxis(4));
+        m_drivetrain, () -> -0.8*m_controller.getRawAxis(1), () -> -0.8*m_controller.getRawAxis(4));
   }
 }
