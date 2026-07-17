@@ -40,7 +40,7 @@ Once connected:
 1. Open the project in VS Code.
 2. Deploy code using the WPILib "Simulate Robot Code".
 3. Open the "Robot Simulation", this will act as your Driver Station and dashboard.
-4. Open yoir dashboard by going to "NetworkTables" -> "Transitory values" -> "SmartDashboard"
+4. Open your dashboard by going to "NetworkTables" -> "Transitory values" -> "SmartDashboard"
 5. Calibrate the gyro before teleop and autonomous testing.
    - Place robot on flat ground.
    - Press Y to calibrate gyro bias.
@@ -219,10 +219,10 @@ Before autonomous testing:
 3. Deploy code.
 4. Place robot on flat ground.
 5. Calibrate gyro.
-7. Open NetworkTables tab at the top left, different from the table.
-8. Hover SmartDashboard and select SendableChooser[0].
+7. Open "NetworkTables" tab at the top left, different from the table.
+8. Hover "SmartDashboard" and select "SendableChooser[0]".
 9. Select your desired auto.
-10. Select Robot State to be Autonomous.
+10. Select "Robot State" to be "Autonomous".
 
 Note:
-If you want to do teleop testing, steps 1-5 are also the teleop testing procedure except at the end you select Robot State to be Teleoperated.
+If you want to do teleop testing, steps 1-5 are also the teleop testing procedure except at the end you select "Robot State" to be "Teleoperated".
