@@ -7,12 +7,14 @@ package frc.robot.subsystems;
 import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.math.kinematics.DifferentialDriveKinematics;
 import edu.wpi.first.math.kinematics.DifferentialDriveOdometry;
 import edu.wpi.first.math.kinematics.DifferentialDriveWheelSpeeds;
 import edu.wpi.first.math.util.Units;
 import edu.wpi.first.util.sendable.SendableRegistry;
 import edu.wpi.first.wpilibj.BuiltInAccelerometer;
+import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.Encoder;
 import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.drive.DifferentialDrive;
@@ -20,6 +22,11 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj.xrp.XRPGyro;
 import edu.wpi.first.wpilibj.xrp.XRPMotor;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+
+import com.pathplanner.lib.auto.AutoBuilder;
+import com.pathplanner.lib.config.RobotConfig;
+import com.pathplanner.lib.controllers.PPLTVController;
+
 
 public class Drivetrain extends SubsystemBase {
   private static final double kGearRatio =
@@ -33,16 +40,17 @@ public class Drivetrain extends SubsystemBase {
 
   private double m_targetHeadingDeg = 0.0;
 
-  private static final double kTurnDeadband = 0.08;
+  private static final double kTurnDeadband = 0.08; 
   private static final double kForwardDeadband = 0.05;
   private static final double kMaxCorrection = 0.375; // 0.375
-  private static final double kTrackWidthMeters = 0.14; //estimate
+  private static final double kTrackWidthMeters = 0.155;
 
   private double m_imuHeadingDeg = 0.0;
   private double m_gyroBiasDegPerSec = 0.0;
   private double m_lastImuTimestamp = Timer.getFPGATimestamp();
 
   private static final double kGyroRateDeadband = 0.3; // deg/sec
+  private static final double kMaxSpeedMetersPerSec = 0.7;
 
   private final DifferentialDriveKinematics m_Kinematics =
       new DifferentialDriveKinematics(kTrackWidthMeters);
@@ -62,6 +70,10 @@ public class Drivetrain extends SubsystemBase {
   // Set up the differential drive controller
   private final DifferentialDrive m_diffDrive =
       new DifferentialDrive(m_leftMotor::set, m_rightMotor::set);
+
+  public final ChassisSpeeds getRobotRelativeSpeeds() {
+    return m_Kinematics.toChassisSpeeds(getWheelSpeeds());
+  }
 
   // Set up the XRPGyro
   private final XRPGyro m_gyro = new XRPGyro();
@@ -89,6 +101,32 @@ public class Drivetrain extends SubsystemBase {
           Rotation2d.fromDegrees(getHeadingDegrees()),
           0,
           0);
+
+    RobotConfig config = null;
+
+    try {
+      config = RobotConfig.fromGUISettings();
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+
+    if (config != null) {
+      AutoBuilder.configure(
+        this::getPose,
+        this::resetPose,
+        this::getRobotRelativeSpeeds,
+        (speeds, feedforwards) -> driveRobotRelative(speeds),
+        new PPLTVController(0.02),
+        config,
+        () -> {
+          var alliance = DriverStation.getAlliance();
+          if (alliance.isPresent()) {
+            return alliance.get() == DriverStation.Alliance.Red;
+          }
+          return false;
+        },
+        this);
+    }
   }
 
   public void arcadeDrive(double xaxisSpeed, double zaxisRotate) {
@@ -222,6 +260,25 @@ public class Drivetrain extends SubsystemBase {
     arcadeDrive(xaxisSpeed, correction);
   }
 
+  public void driveRobotRelative(ChassisSpeeds speeds) {
+
+      DifferentialDriveWheelSpeeds wheelSpeeds = m_Kinematics.toWheelSpeeds(speeds);
+
+      double leftPercent = wheelSpeeds.leftMetersPerSecond/kMaxSpeedMetersPerSec;
+
+      double rightPercent = wheelSpeeds.rightMetersPerSecond/kMaxSpeedMetersPerSec;
+
+      double max = Math.max(Math.abs(leftPercent), Math.abs(rightPercent));
+
+      if (max > 1.0) {
+        leftPercent /= max;
+        rightPercent /=max;
+      }
+
+      m_leftMotor.set(leftPercent);
+      m_rightMotor.set(rightPercent);
+  }
+
   public Pose2d getPose() {
     return m_odometry.getPoseMeters();
   }
@@ -316,5 +373,8 @@ public void periodic() {
   SmartDashboard.putNumber("Pose X", getPose().getX());
   SmartDashboard.putNumber("Pose Y", getPose().getY());
   SmartDashboard.putNumber("Pose Rotation", getPose().getRotation().getDegrees());
+  SmartDashboard.putNumber("Robot Velocity", getRobotRelativeSpeeds().vxMetersPerSecond);
+  SmartDashboard.putNumber("Robot Angular Velocity", getRobotRelativeSpeeds().omegaRadiansPerSecond * 57.2958);
+
 }
 }

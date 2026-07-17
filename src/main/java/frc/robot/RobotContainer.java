@@ -4,6 +4,8 @@
 
 package frc.robot;
 
+import com.pathplanner.lib.auto.AutoBuilder;
+
 import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.wpilibj.GenericHID;
 import edu.wpi.first.wpilibj.Joystick;
@@ -85,8 +87,12 @@ public class RobotContainer {
         .onTrue(new InstantCommand(() -> m_drivetrain.calibrateGyroBias(), m_drivetrain));
 
     // Setup SmartDashboard options
-    m_chooser.setDefaultOption("Auto Routine Distance", new AutonomousDistance(m_drivetrain));
+    m_chooser.setDefaultOption("CurvedLine", AutoBuilder.buildAuto("CurvedLine"));
+    m_chooser.addOption("Auto Routine Distance", new AutonomousDistance(m_drivetrain));
     m_chooser.addOption("Auto Routine Time", new AutonomousTime(m_drivetrain));
+    m_chooser.addOption("90 Degree Turn", AutoBuilder.buildAuto("90DegreeAuto"));
+    m_chooser.addOption("Test", AutoBuilder.buildAuto("Test"));
+
     SmartDashboard.putData(m_chooser);
   }
 
