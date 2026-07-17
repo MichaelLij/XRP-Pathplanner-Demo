@@ -5,9 +5,16 @@
 package frc.robot.subsystems;
 
 import edu.wpi.first.math.controller.PIDController;
+import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.math.kinematics.DifferentialDriveKinematics;
+import edu.wpi.first.math.kinematics.DifferentialDriveOdometry;
+import edu.wpi.first.math.kinematics.DifferentialDriveWheelSpeeds;
+import edu.wpi.first.math.util.Units;
 import edu.wpi.first.util.sendable.SendableRegistry;
 import edu.wpi.first.wpilibj.BuiltInAccelerometer;
 import edu.wpi.first.wpilibj.Encoder;
+import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.drive.DifferentialDrive;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj.xrp.XRPGyro;
@@ -21,13 +28,26 @@ public class Drivetrain extends SubsystemBase {
   private static final double kCountsPerRevolution = kCountsPerMotorShaftRev * kGearRatio; // 585.0
   private static final double kWheelDiameterInch = 2.3622; // 60 mm
 
-  private final PIDController m_headingController = new PIDController(0.03, 0.0, 0.001);
+  //P: 0.055  D: 0.65
+  private final PIDController m_headingController = new PIDController(0.055, 0.0, 0.65);
 
   private double m_targetHeadingDeg = 0.0;
 
   private static final double kTurnDeadband = 0.08;
   private static final double kForwardDeadband = 0.05;
-  private static final double kMaxCorrection = 0.25;
+  private static final double kMaxCorrection = 0.375; // 0.375
+  private static final double kTrackWidthMeters = 0.14; //estimate
+
+  private double m_imuHeadingDeg = 0.0;
+  private double m_gyroBiasDegPerSec = 0.0;
+  private double m_lastImuTimestamp = Timer.getFPGATimestamp();
+
+  private static final double kGyroRateDeadband = 0.3; // deg/sec
+
+  private final DifferentialDriveKinematics m_Kinematics =
+      new DifferentialDriveKinematics(kTrackWidthMeters);
+
+  private final DifferentialDriveOdometry m_odometry;
 
   // The XRP has the left and right motors set to
   // channels 0 and 1 respectively
@@ -63,6 +83,12 @@ public class Drivetrain extends SubsystemBase {
     m_leftEncoder.setDistancePerPulse((Math.PI * kWheelDiameterInch) / kCountsPerRevolution);
     m_rightEncoder.setDistancePerPulse((Math.PI * kWheelDiameterInch) / kCountsPerRevolution);
     resetEncoders();
+
+    m_odometry =
+        new DifferentialDriveOdometry(
+          Rotation2d.fromDegrees(getHeadingDegrees()),
+          0,
+          0);
   }
 
   public void arcadeDrive(double xaxisSpeed, double zaxisRotate) {
@@ -151,12 +177,15 @@ public class Drivetrain extends SubsystemBase {
   /** Reset the gyro. */
   public void resetGyro() {
     m_gyro.reset();
+    m_imuHeadingDeg = 0.0;
     m_targetHeadingDeg = 0.0;
     m_headingController.reset();
+    m_lastImuTimestamp = Timer.getFPGATimestamp();
   }
 
+
   public double getHeadingDegrees() {
-    return m_gyro.getAngle();
+    return m_imuHeadingDeg;
   }
 
   public double getGyroRateZ() {
@@ -193,21 +222,99 @@ public class Drivetrain extends SubsystemBase {
     arcadeDrive(xaxisSpeed, correction);
   }
 
-
-  @Override
-  public void periodic() {
-    SmartDashboard.putNumber("Gyro Heading Deg", getHeadingDegrees());
-    SmartDashboard.putNumber("Gyro Rate Z", getGyroRateZ());
-
-    SmartDashboard.putNumber("Left Distance Inch", getLeftDistanceInch());
-    SmartDashboard.putNumber("Right Distance Inch", getRightDistanceInch());
-    SmartDashboard.putNumber("Average Distance Inch", getAverageDistanceInch());
-
-    SmartDashboard.putNumber(
-        "Left Right Distance Difference",
-        getLeftDistanceInch() - getRightDistanceInch());
-    SmartDashboard.putNumber("Heading", getHeadingDegrees());
-    SmartDashboard.putNumber("Left Count", getLeftEncoderCount());
-    SmartDashboard.putNumber("Right Count", getRightEncoderCount());
+  public Pose2d getPose() {
+    return m_odometry.getPoseMeters();
   }
+
+  public void resetPose(Pose2d pose) {
+    resetEncoders();
+    resetGyro();
+
+    m_odometry.resetPosition(
+        Rotation2d.fromDegrees(getHeadingDegrees()),
+        0,
+        0,
+        pose);
+  }
+
+  public DifferentialDriveWheelSpeeds getWheelSpeeds() {
+    return new DifferentialDriveWheelSpeeds(
+        Units.inchesToMeters(m_leftEncoder.getRate()),
+        Units.inchesToMeters(m_rightEncoder.getRate())
+    );
+  }
+
+  public void calibrateGyroBias() {
+    m_gyro.reset();
+
+    double sum = 0.0;
+    int samples = 300;
+
+    for (int i = 0; i < samples; i++) {
+      double rate = m_gyro.getRateZ();
+      System.out.println("Sample " + i + ": " + rate);
+      sum += rate;
+      Timer.delay(0.01);
+    }
+
+    m_gyroBiasDegPerSec = sum / samples;
+
+    m_imuHeadingDeg = 0.0;
+    m_targetHeadingDeg = 0.0;
+    m_headingController.reset();
+    m_lastImuTimestamp = Timer.getFPGATimestamp();
+  }
+
+  private void updateIntegratedImuHeading() {
+    double now = Timer.getFPGATimestamp();
+    double dt = now - m_lastImuTimestamp;
+    m_lastImuTimestamp = now;
+
+    if (dt <= 0.0 || dt > 0.1) {
+      return;
+    }
+
+    double rate = m_gyro.getRateZ() - m_gyroBiasDegPerSec;
+
+    if (Math.abs(rate) < kGyroRateDeadband) {
+      rate = 0.0;
+    }
+
+    m_imuHeadingDeg += rate * dt;
+  }
+
+
+@Override
+public void periodic() {
+  updateIntegratedImuHeading();
+
+  double correction =
+    m_headingController.calculate(
+        getHeadingDegrees(),
+        m_targetHeadingDeg);
+
+  SmartDashboard.putNumber("Target Heading", m_targetHeadingDeg);
+  SmartDashboard.putNumber("Heading Error",
+      m_targetHeadingDeg - getHeadingDegrees());
+  SmartDashboard.putNumber("Correction", correction);
+
+  m_odometry.update(
+      Rotation2d.fromDegrees(getHeadingDegrees()),
+      Units.inchesToMeters(getLeftDistanceInch()),
+      Units.inchesToMeters(getRightDistanceInch()));
+
+  SmartDashboard.putNumber("Raw Gyro Angle", m_gyro.getAngle());
+  SmartDashboard.putNumber("Raw Gyro Rate Z", m_gyro.getRateZ());
+  SmartDashboard.putNumber("Gyro Bias", m_gyroBiasDegPerSec);
+  SmartDashboard.putNumber("Integrated IMU Heading", getHeadingDegrees());
+
+  SmartDashboard.putNumber("Left Distance Inch", getLeftDistanceInch());
+  SmartDashboard.putNumber("Right Distance Inch", getRightDistanceInch());
+  SmartDashboard.putNumber("Left Rate", m_leftEncoder.getRate());
+  SmartDashboard.putNumber("Right Rate", m_rightEncoder.getRate());
+
+  SmartDashboard.putNumber("Pose X", getPose().getX());
+  SmartDashboard.putNumber("Pose Y", getPose().getY());
+  SmartDashboard.putNumber("Pose Rotation", getPose().getRotation().getDegrees());
+}
 }

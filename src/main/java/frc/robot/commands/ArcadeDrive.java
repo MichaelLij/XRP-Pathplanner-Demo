@@ -38,7 +38,12 @@ public class ArcadeDrive extends Command {
   // Called every time the scheduler runs while the command is scheduled.
   @Override
   public void execute() {
-    m_drivetrain.arcadeDriveGyroAssist(m_xaxisSpeedSupplier.get(), m_zaxisRotateSupplier.get());
+    double forward = m_xaxisSpeedSupplier.get();
+    double turn = m_zaxisRotateSupplier.get();
+
+    // System.out.println("Forward: " + forward + "Turn: " + turn);
+
+    m_drivetrain.arcadeDriveGyroAssist(forward, turn);
   }
 
   // Called once the command ends or is interrupted.

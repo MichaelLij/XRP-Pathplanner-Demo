@@ -4,9 +4,11 @@
 
 package frc.robot;
 
+import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.wpilibj.GenericHID;
 import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.XboxController;
+import edu.wpi.first.wpilibj.XboxController.Axis;
 import frc.robot.commands.ArcadeDrive;
 import frc.robot.commands.AutonomousDistance;
 import frc.robot.commands.AutonomousTime;
@@ -32,6 +34,8 @@ public class RobotContainer {
   private final Drivetrain m_drivetrain = new Drivetrain();
   private final XRPOnBoardIO m_onboardIO = new XRPOnBoardIO();
   private final Arm m_arm = new Arm();
+
+  private double m_driveSpeedMult = 0.6;
 
   // Assumes a gamepad plugged into channel 0
   private final Joystick m_controller = new Joystick(0);
@@ -76,6 +80,10 @@ public class RobotContainer {
     joystickXButton
         .onTrue(new InstantCommand(() -> m_drivetrain.resetGyro(), m_drivetrain));
 
+    JoystickButton joystickYButton = new JoystickButton(m_controller, 4);
+    joystickYButton
+        .onTrue(new InstantCommand(() -> m_drivetrain.calibrateGyroBias(), m_drivetrain));
+
     // Setup SmartDashboard options
     m_chooser.setDefaultOption("Auto Routine Distance", new AutonomousDistance(m_drivetrain));
     m_chooser.addOption("Auto Routine Time", new AutonomousTime(m_drivetrain));
@@ -91,6 +99,10 @@ public class RobotContainer {
     return m_chooser.getSelected();
   }
 
+  private double getDriveSpeed() {
+    return 0.6 + 0.4*m_controller.getRawAxis(2);
+  }
+
   /**
    * Use this to pass the teleop command to the main {@link Robot} class.
    *
@@ -98,6 +110,6 @@ public class RobotContainer {
    */
   public Command getArcadeDriveCommand() {
     return new ArcadeDrive(
-        m_drivetrain, () -> -0.8*m_controller.getRawAxis(1), () -> -0.8*m_controller.getRawAxis(4));
+        m_drivetrain, () -> -getDriveSpeed()*m_controller.getRawAxis(1), () -> -getDriveSpeed()*m_controller.getRawAxis(4));
   }
 }
